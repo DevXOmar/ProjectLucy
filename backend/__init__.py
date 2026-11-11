@@ -1,1 +1,1 @@
-"""Backend package for Paytm Grow."""
+"""Project Lucy backend package."""

@@ -40,7 +40,7 @@ const FEATURES = [
   {
     name: "Loan Readiness Coach",
     icon: <Banknote size={20} />,
-    text: "Turns settled transaction history into a readiness tier, with SHAP-derived coaching on the two factors worth improving next."
+    text: "Turns synthetic historical transactions into a readiness tier, with SHAP-derived coaching on the two factors worth improving next."
   },
   {
     name: "Soundbox Copilot",
@@ -56,7 +56,7 @@ const STEPS = [
   },
   {
     title: "Models read that history",
-    text: "Survival models, a seasonal forecaster, peer-similarity embeddings and a readiness classifier run locally over the shop's own data."
+    text: "Precomputed survival, forecast, peer-similarity and readiness insights remain available from synthetic shop history."
   },
   {
     title: "The shop gets one next action",
@@ -219,7 +219,7 @@ export default function Landing({ onLaunch }: { onLaunch: () => void }) {
             transition={{ duration: 0.5 }}
             className="inline-flex items-center gap-2 rounded-full border border-paytm-cyan bg-surface/80 px-4 py-1.5 text-[11px] font-black uppercase tracking-wide text-paytm-navy backdrop-blur"
           >
-            <Sparkles size={13} className="text-paytm-cyan" /> AI growth layer for local shops
+            <Sparkles size={13} className="text-paytm-cyan" /> Adaptive commerce orchestration
           </motion.span>
           <motion.h1
             initial={{ opacity: 0, y: 18 }}
@@ -235,9 +235,9 @@ export default function Landing({ onLaunch }: { onLaunch: () => void }) {
             transition={{ duration: 0.6, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
             className="mx-auto mt-6 max-w-2xl text-base leading-7 text-text-muted md:text-lg"
           >
-            Paytm Grow is an AI layer that sits on top of the payment infrastructure a shop already uses. It reads a
-            merchant's own transaction history to show which regulars are slipping away, whether their prices still hold
-            up against similar shops, and what the next month of revenue looks like.
+            Project Lucy is building an AI teammate for customer and merchant goals, coordinated through CrewOS.
+            This foundation connects durable orders, inventory reservations and approval tools with historical merchant
+            insights. Autonomous planning across buying, group offers, surplus and rentals comes next.
           </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 18 }}
@@ -328,10 +328,10 @@ export default function Landing({ onLaunch }: { onLaunch: () => void }) {
                 <h2 className="text-xl font-black text-paytm-navy md:text-2xl">About this prototype</h2>
               </div>
               <p className="mt-5 text-sm leading-7 text-text-muted">
-                Paytm Grow is a hackathon prototype. It runs entirely on a laptop: a FastAPI backend over local SQLite, a
-                deterministic synthetic dataset, and the models running in-process on startup. The payment flow generates
-                real UPI deep-link intents in the standard NPCI URI format that the Paytm app resolves, while the
-                in-browser payment itself is simulated so the demo stays reliable on stage.
+                Project Lucy is an independent hackathon prototype, not an official Paytm product. Lucy is the customer-facing
+                lead; CrewOS provides the commerce tools and persisted mission state. Historical ML insights use the preserved
+                synthetic snapshot. Operational orders, reservations and payments use SQL storage. All payments are DEMO_SIMULATED;
+                synthetic UPI recipients are preview-only and live handoff is disabled.
               </p>
               <p className="mt-4 text-sm leading-7 text-text-muted">
                 Where a number is an estimate or a label is synthetic, the app says so on the screen it appears on.

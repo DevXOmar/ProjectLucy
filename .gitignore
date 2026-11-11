@@ -6,3 +6,6 @@ __pycache__/
 backend/paytm_grow.db
 test-results/
 playwright-report/
+backend/lucy.db*
+.env
+.env.local

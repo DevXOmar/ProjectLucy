@@ -1,21 +1,7 @@
-"""Real UPI deep-link intent construction for Paytm Grow.
+"""UPI syntax previews only. All seeded recipients are synthetic and unverified.
 
-Nothing in this module is mocked. Both URI schemes used here are real and
-publicly documented:
-
-- ``upi://pay?...``     the NPCI-defined universal UPI deep-link scheme that
-                        every UPI-capable Android/iOS app registers a handler for.
-- ``paytmmp://pay?...`` the Paytm app's own registered scheme, which resolves
-                        straight into the Paytm payment sheet when Paytm is installed.
-
-The query parameters (``pa``, ``pn``, ``am``, ``cu``, ``tn``, ``tr``) are the
-standard NPCI UPI URI parameters: payee address (VPA), payee name, amount,
-currency, transaction note, and transaction reference id.
-
-On a phone with Paytm installed these links genuinely hand off to the real
-Paytm app. On a demo laptop there is no registered handler, so the link simply
-does not resolve - that is expected, and the in-app simulated payment stays the
-primary demo path.
+Formatting a URI provides neither merchant authorization nor payment settlement.
+No live provider adapter or payment handoff is enabled in this application.
 """
 
 from __future__ import annotations
@@ -70,8 +56,7 @@ def upi_params(
         "tn": note,
     }
     if order_id:
-        # `tr` is the NPCI transaction reference id - what a live merchant would
-        # reconcile the collect against. We pass our own orderId through it.
+        # Preview reference only; not evidence of an authorized payment.
         params["tr"] = order_id
     return params
 

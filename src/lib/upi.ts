@@ -1,20 +1,4 @@
-/**
- * Real UPI deep-link intent construction (client side).
- *
- * This mirrors `backend/upi.py` exactly so the link previewed on the Pay screen
- * is byte-identical to the one the backend generates and logs for the order.
- *
- * Both schemes are real and publicly documented:
- *   - `upi://pay?...`     NPCI's universal UPI deep-link scheme, handled by every UPI app.
- *   - `paytmmp://pay?...` the Paytm app's own registered scheme.
- *
- * Parameters are the standard NPCI ones: pa (payee VPA), pn (payee name),
- * am (amount), cu (currency), tn (transaction note), tr (transaction reference).
- *
- * On a phone with Paytm installed these hand off to the real Paytm app. On a demo
- * laptop no handler is registered, so the link simply does not resolve.
- */
-
+/** Preview construction only. Synthetic VPAs must never be used for live handoff. */
 export const PAYTM_SCHEME = "paytmmp://pay";
 export const UPI_SCHEME = "upi://pay";
 

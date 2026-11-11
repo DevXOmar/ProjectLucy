@@ -119,8 +119,8 @@ export function Wordmark({ size = "md", onClick, title }: { size?: "md" | "lg"; 
   const text = size === "lg" ? "text-2xl" : "text-lg";
   const mark = (
     <div className="text-left">
-      <div className={`${text} font-black leading-none text-paytm-navy`}>Paytm</div>
-      <div className={`-mt-0.5 ${text} font-black leading-none text-paytm-cyan`}>Grow</div>
+      <div className={`${text} font-black leading-none text-paytm-navy`}>Project</div>
+      <div className={`-mt-0.5 ${text} font-black leading-none text-paytm-cyan`}>Lucy</div>
     </div>
   );
   if (!onClick) return mark;
@@ -213,7 +213,7 @@ export function TopBar({ role, onRoleChange, onReset, onHome }: { role: Role; on
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-surface/95 px-4 py-3 backdrop-blur">
       <div className="mx-auto flex max-w-[430px] items-center justify-between gap-3">
-        <Wordmark onClick={onHome} title="Back to Paytm Grow home" />
+        <Wordmark onClick={onHome} title="Back to Project Lucy home" />
         <Toggle role={role} onChange={onRoleChange} />
         <motion.button
           {...tapProps}

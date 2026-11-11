@@ -5,9 +5,15 @@ import { test, expect } from "@playwright/test";
  * categories, checking for leftover old product names on every screen visited.
  */
 
-const OLD_NAMES = /apna dukaan|apna|dukaan|rishta|bhaav|vyapar/i;
+const OLD_NAMES = /paytm grow|paytmgrow|apna dukaan|apna|dukaan|rishta|bhaav|vyapar/i;
 const BASE = "http://127.0.0.1:5173";
-const SHOTS = "/tmp/pg-shots";
+let SHOTS = "/tmp/lucy-shots";
+
+test.beforeEach(async ({ request }, info) => {
+  SHOTS = `/tmp/lucy-shots/${info.project.name}`;
+  const reset = await request.post("/api/reset-demo", { headers: { "X-Reset-Token": "local-reset" } });
+  expect(reset.ok()).toBeTruthy();
+});
 
 /** Bottom-nav tab by label (avoids matching same-named dashboard cards). */
 function navTab(page: any, label: string) {
@@ -49,7 +55,7 @@ test("landing page, rename sweep, category switch, market match, upi link", asyn
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.getByRole("button", { name: "Launch Demo" }).last().click();
   await page.waitForTimeout(1200);
-  await expect(page.getByText("Your Paytm Grow Insight")).toBeVisible();
+  await expect(page.getByText("Your Project Lucy Insight")).toBeVisible();
   await expect(page.getByText("Store you're shopping at")).toBeVisible();
   await assertNoOldNames(page, "customer home");
   await page.screenshot({ path: `${SHOTS}/03-customer-home.png`, fullPage: true });
@@ -62,7 +68,7 @@ test("landing page, rename sweep, category switch, market match, upi link", asyn
   await page.locator("button").filter({ hasText: "Deccan Sports Corner" }).first().click();
   await page.waitForTimeout(500);
   for (const key of ["4", "5", "0"]) await page.getByRole("button", { name: key, exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Pay with Paytm" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "UPI intent preview" })).toBeVisible();
   await page.getByRole("button", { name: "View UPI payment link" }).click();
   await page.waitForTimeout(500);
   const paytmLink = await page.locator("p.font-mono").first().innerText();
@@ -74,17 +80,23 @@ test("landing page, rename sweep, category switch, market match, upi link", asyn
   await assertNoOldNames(page, "amount entry + upi panel");
   await page.screenshot({ path: `${SHOTS}/05-amount-upi.png`, fullPage: true });
 
-  await page.getByRole("button", { name: /^Pay ₹/ }).click();
-  await page.waitForTimeout(6000);
-  await expect(page.getByText("Payment Success")).toBeVisible();
-  await expect(page.getByText("TXN_SUCCESS")).toBeVisible();
-  await page.getByRole("button", { name: "View UPI payment link" }).click();
+  // First attempt errors visibly; retry creates a pending session without a transaction.
+  await page.route("**/api/payments", route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { message: "Temporary demo failure" } }) }));
+  await page.getByRole("button", { name: /^Create demo payment/ }).click();
+  await expect(page.getByRole("alert")).toContainText("Temporary demo failure");
+  await page.unroute("**/api/payments");
+  await page.getByRole("button", { name: /^Create demo payment/ }).click();
+  await expect(page.getByRole("heading", { name: "Payment pending" })).toBeVisible();
+  await expect(page.getByText("PENDING", { exact: true })).toBeVisible();
+  await expect(page.locator('a[href^="upi:"], a[href^="paytmmp:"]')).toHaveCount(0);
   await page.waitForTimeout(400);
-  const orderLink = await page.locator("p.font-mono").filter({ hasText: "paytmmp://" }).first().innerText();
-  console.log("BACKEND ORDER INTENT:", orderLink);
-  expect(orderLink).toContain("&tr=PG-");
-  await assertNoOldNames(page, "payment success");
-  await page.screenshot({ path: `${SHOTS}/06-success.png`, fullPage: true });
+  await page.screenshot({ path: `${SHOTS}/06-pending.png`, fullPage: true });
+  await page.getByRole("button", { name: "Simulate confirmation", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Demo payment confirmed" })).toBeVisible();
+  await expect(page.getByText("CONFIRMED", { exact: true })).toBeVisible();
+  await expect(page.getByText(/No real Paytm settlement/)).toBeVisible();
+  await assertNoOldNames(page, "demo payment confirmed");
+  await page.screenshot({ path: `${SHOTS}/06-confirmed.png`, fullPage: true });
 
   // --- Customer rewards + profile ---
   await navTab(page, "Rewards").click();
@@ -114,7 +126,7 @@ test("landing page, rename sweep, category switch, market match, upi link", asyn
   console.log("KIRANA SKUS:", kiranaSkus.join(" / "));
   await page.locator("div.no-scrollbar button").nth(1).click();
   await page.waitForTimeout(1600);
-  for (const platform of ["ZipKart", "SpeedBasket", "CityMart Express", "QuickHive", "Paytm Grow Network Avg"]) {
+  for (const platform of ["ZipKart", "SpeedBasket", "CityMart Express", "QuickHive", "Project Lucy Network Avg"]) {
     await expect(page.getByText(platform, { exact: true }).first()).toBeVisible();
   }
   await expect(page.getByText("Best price")).toBeVisible();
@@ -191,5 +203,67 @@ test("landing page, rename sweep, category switch, market match, upi link", asyn
   await expect(page.getByRole("heading", { level: 1 })).toContainText("relationship");
 
   console.log("CONSOLE ERRORS:", errors.length ? errors.join(" || ") : "none");
-  expect(errors.filter((error) => !/favicon|ResizeObserver/i.test(error))).toEqual([]);
+  expect(errors.filter((error) => !/favicon|ResizeObserver|503 \(Service Unavailable\)/i.test(error))).toEqual([]);
+});
+
+test('durable approved order and payment appear in customer and merchant screens', async ({ page, request }) => {
+  const customer = { 'X-Demo-Role': 'customer', 'X-Demo-Id': '6' };
+  const merchant = { 'X-Demo-Role': 'merchant', 'X-Demo-Id': '17' };
+  const post = async (path: string, data?: unknown, actor = customer, key = crypto.randomUUID()) => {
+    const response = await request.post(`/api${path}`, { data, headers: { ...actor, 'Idempotency-Key': key } });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    return response.json();
+  };
+  const orderKey = crypto.randomUUID();
+  const payload = { merchant_id: 17, items: [{ offer_id: 'projector-rent', quantity: 1 }] };
+  const order = await post('/orders', payload, customer, orderKey);
+  expect((await post('/orders', payload, customer, orderKey)).id).toBe(order.id);
+  await post('/reservations', { order_id: order.id });
+  const approval = (await post('/approvals', { order_id: order.id })).approval;
+  await post(`/approvals/${approval.id}/decision`, { approve: true });
+  await post(`/orders/${order.id}/confirm`);
+  const payment = await post('/payments', { merchant_id: 17, order_id: order.id, amount_paise: 90000 });
+  expect(payment.status).toBe('PENDING');
+  await page.goto('/#/app');
+  await expect(page.getByText(new RegExp(`Order ${order.id.slice(0, 8)}.*CONFIRMED`))).toBeVisible();
+  await expect(page.getByRole('button', { name: new RegExp(`Payment ${payment.id.slice(0, 8)}.*PENDING`) })).toBeVisible();
+  await page.getByRole('button', { name: new RegExp(`Payment ${payment.id.slice(0, 8)}`) }).click();
+  await expect(page.getByRole('heading', { name: 'Payment pending' })).toBeVisible();
+  await page.getByRole('button', { name: 'Simulate confirmation', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Demo payment confirmed' })).toBeVisible();
+  const sessions = await request.get('/api/payments', { headers: customer });
+  expect((await sessions.json()).length).toBe(1);
+  const duplicate = await request.post(`/api/payments/${payment.id}/simulate`, { headers: { ...customer, 'Idempotency-Key': crypto.randomUUID() }, data: { status: 'CONFIRMED', event_key: crypto.randomUUID() } });
+  expect(duplicate.status()).toBe(409);
+  await page.getByRole('button', { name: 'Merchant view' }).click();
+  await page.locator('select').first().selectOption({ label: 'Deccan Sports Corner · Sports Shop' });
+  await expect(page.getByText(new RegExp(`Order ${order.id.slice(0, 8)}.*FULFILLMENT_PENDING`))).toBeVisible();
+  await expect(page.getByRole('button', { name: new RegExp(`Payment ${payment.id.slice(0, 8)}.*CONFIRMED`) })).toBeVisible();
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: `${SHOTS}/16-durable-merchant-order.png`, fullPage: true });
+  await post(`/orders/${order.id}/fulfill`, undefined, merchant);
+  await expect(page.getByText(new RegExp(`Order ${order.id.slice(0, 8)}.*FULFILLED`))).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: 'Merchant view' }).click();
+  await page.locator('select').first().selectOption({ label: 'Deccan Sports Corner · Sports Shop' });
+  await expect(page.getByText(new RegExp(`Order ${order.id.slice(0, 8)}.*FULFILLED`))).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  expect(overflow).toBeFalsy();
+});
+
+test('records a Lucy mission without claiming autonomous execution', async ({ page, request }) => {
+  await page.goto('/#/app');
+  await page.locator('summary').filter({ hasText: 'Ask Lucy' }).click();
+  await page.getByRole('button', { name: 'Create Movie Night mission', exact: true }).click();
+  await expect(page.getByText(/^Mission .* · CREATED$/)).toBeVisible();
+  const response = await request.get('/api/missions', { headers: { 'X-Demo-Role': 'customer', 'X-Demo-Id': '6' } });
+  const missions = await response.json();
+  expect(missions).toHaveLength(1);
+  expect(missions[0].budget_paise).toBe(250000);
+  expect(missions[0].status).toBe('CREATED');
+  expect(missions[0].requirements.products).toHaveLength(3);
+  await expect(page.getByText(/Autonomous planning is the next phase/)).toBeVisible();
+  const events = await request.get(`/api/missions/${missions[0].id}/events`, { headers: { 'X-Demo-Role': 'customer', 'X-Demo-Id': '6' } });
+  expect((await events.json()).events.map((event: { action: string }) => event.action)).toEqual(['create_mission']);
+  await page.screenshot({ path: `${SHOTS}/17-lucy-mission.png`, fullPage: true });
 });

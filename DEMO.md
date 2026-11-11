@@ -1,47 +1,31 @@
-# Paytm Grow Demo Script
+# Project Lucy demo
 
-## 3-Minute Walkthrough
+Start the API and Vite as described in README. Use default local configuration. All merchant/customer identities, inventory, historical transactions and payment outcomes are synthetic.
 
-1. Open `http://127.0.0.1:5173`. Start on the **landing page**: top nav, hero with the animated gradient wash and floating module icons, the six-module feature grid, the stats strip pulled live from `GET /stats`, and the footer. Tap **Launch Demo** — no login, no form.
-2. Land in Customer view on Home. Show the Paytm-style top bar, navy wallet card, quick actions, Paytm Grow Insight banner, and real SQLite transaction list. Note the two grouped selectors: demo customer, and the store they're shopping at (grouped by category).
-3. Tap UPI or Scan & Pay. Nearby merchants lists one shop per category with a colour-coded category chip. Select Sharma Kirana Store, enter ₹120.
-4. Before paying, expand **Pay with Paytm → View UPI payment link**. Show the real `paytmmp://pay?...` and `upi://pay?...` intents built from that merchant's VPA. On a phone this opens the Paytm app; on the laptop it will not resolve, which is why the simulated payment below is the demo path.
-5. Tap Pay. Payment writes a real SQLite transaction, recomputes ML, and lands on Payment Success — with the backend's `orderId`, `txnStatus`, `payerVpa`/`payeeVpa`, and the UPI link generated for that order.
-6. Return Home. The QR payment now appears in Recent Activity and the customer insight refreshes without restarting the server.
-7. Tap Rewards. Show Rewards Boost: Thompson Sampling selected multiplier, points earned on last purchase, wallet redemption offers. Redeem one offer and show the point balance decrement.
-8. Tap Profile. Show avatar, phone, home store, loyalty-by-merchant list, and Reset Demo Data.
-9. Switch to Merchant view. The dashboard surfaces all AI modules as tappable cards: Merchant Pulse, Loyalty call-list, Market Match, Rewards Boost, Loan Coach, and Soundbox Copilot.
-10. Tap Merchant Pulse. Read the Holt-Winters briefing with forecast sparkline, busiest hours, anomaly/same-weekday drop, cashflow note, and churn-risk call list.
-11. Tap Pricing for **Market Match**. Pick one item to open the focused comparison: your shop, the `Computed` Paytm Grow Network Avg, and the four illustrative demo platforms, sorted cheapest first with a Best price badge. Read the permanent caption — it is plainly visible, not behind a tooltip. Point out that the recommendation card underneath cites only your price against the network average. Tap Accept action once.
-12. **Switch category.** Use the grouped merchant dropdown to pick a Sports Shop (e.g. Deccan Sports Corner). Market Match instantly shows cricket bat / badminton racket / football instead of milk and atta, and Merchant Pulse and Loan Readiness re-render for that merchant. Repeat with a Salon to show services priced without units.
-13. Tap Rewards and Loan. Show merchant rewards economics and SHAP-derived loan coaching.
-14. Tap the floating Soundbox mic in Merchant view. Try: "business update", "who should I call", "am I priced right on milk" (or "cricket bat" on a Sports Shop), and "loan readiness". Typed fallback opens immediately when voice is unavailable.
-15. Tap Reset Demo Data. Explain that it reseeds deterministic SQLite across all six categories, removes demo payments/redemptions, and recomputes the ML cache for the next judge.
+1. Open the landing page. The navy/cyan composition, six existing merchant modules and historical stats are preserved. Launch Demo opens customer 6.
+2. Customer home shows **Demo allowance**, its SQL-derived source, demo rewards, existing loyalty insight and transaction history. Identity and merchant selectors are demo navigation.
+3. **Ask Lucy** records the Movie Night goal, ₹2,500 budget and product requirements as a `CREATED` mission. It does not automatically plan or execute. The API supports explicit state transitions and task assignments for the next orchestration slice.
+4. Open **Pay**, choose Deccan Sports Corner, enter ₹450 and expand **View UPI payment link**. It is a non-clickable syntax preview for a synthetic recipient. No app handoff is available.
+5. Choose **Create demo payment**. The session is `PENDING`; transaction history, demo allowance and points have not changed. Return home and select it under Lucy commerce activity to resume after navigation or page reload.
+6. Choose **Simulate confirmation**. It becomes `CONFIRMED` with `DEMO_SIMULATED`, external verification false and an explicit no-real-settlement label. History gains one simulated transaction; allowance decreases ₹450 and points increase 45. Failure/cancel simulation is also available while pending. Retries with the same key replay the original result; another confirmation is rejected.
+7. Switch to **Merchant view**, select Deccan Sports Corner. Lucy commerce activity independently reads the payment. Existing pulse, insights, pricing, rewards, category switching, loan coaching and Soundbox lookup remain available. They use preserved historical ML data.
+8. Reset through the header/Profile or `npm run reset`. Operational missions, orders, payments, reservations, redemptions and audit events are cleared; inventory and demo allowance return to fixture values. Historical analytics and all 24 merchants remain unchanged. This action is developer-only and disabled when hosted.
 
-## What Is Fully Real ML
+## Order workflow and Movie Night
 
-- BG/NBD P(alive) and Gamma-Gamma CLV from `lifetimes`.
-- Holt-Winters weekly-seasonal revenue forecast from `statsmodels`.
-- Residual and same-weekday anomaly detection from transaction history.
-- Merchant peer embeddings from `TruncatedSVD` and cosine similarity — this is what the Paytm Grow Network Avg row is computed from.
-- Thompson Sampling offer selection in NumPy using seeded synthetic redemption observations.
-- Random Forest loan-readiness classifier and SHAP explanations.
-- Payment writes, reward redemptions, reset, and pricing action logging are real local backend mutations.
-- UPI deep-link generation: real NPCI-format `upi://pay` and `paytmmp://pay` intents, built from each merchant's VPA. See PAYTM_TECH.md.
+`npm run test:backend` executes the complete workflow through actual API and database changes. `npm run qa` additionally creates an approved rental order through the API and verifies the resulting order/payment states in both customer and merchant screens on desktop and mobile.
 
-## What Is Polished Mockup
+Movie Night fixture prices: projector rental ₹900 at merchant 17, ten sealed eligible surplus snack boxes at ₹70 each from merchant 1, and ten drinks at ₹60 each from merchant 2. Total **₹2,200**. A projector purchase alternative costs ₹18,000 and exceeds the mission budget. Each merchant requires a separate order/payment session.
 
-- QR scanning camera integration is mocked; selecting a nearby merchant and posting the payment are real local flows.
-- The in-browser payment is simulated. The UPI link generation around it is real; we had no sandbox merchant credentials, so nothing settles.
-- ZipKart, SpeedBasket, CityMart Express and QuickHive are fictional demo platforms with seeded prices — illustrative comparison rows only, never used in any recommendation. The app says so on the screen.
-- Pricing accept action logs to backend console only.
-- Loan labels are synthetic demo labels generated from documented rules; the tier cut-points are percentiles of the network's own readiness score.
-- Merchant retained revenue and rewards cost are simplified estimates.
+The API sequence, using `X-Demo-Role: customer`, `X-Demo-Id: 6` and a fresh `Idempotency-Key` for each logical mutation:
 
-## Roadmap
+1. `POST /missions` with goal, budget_paise=250000 and product requirements.
+2. `POST /missions/{id}/transition` to PLANNING; assign MissionCart procurement through `/tasks`; transition to EXECUTING.
+3. Read `/offers` and `/offers/{id}`. `POST /orders` with merchant_id, mission_id and offer/quantity lines creates DRAFT. Retry the same key to retrieve the same order.
+4. `POST /reservations` with order_id atomically holds inventory for up to 15 minutes. Insufficient stock rejects the entire operation.
+5. `POST /approvals` requests approval. `POST /approvals/{id}/decision` with approve=true records the customer's decision. `POST /orders/{id}/confirm` commits only with that approval and live reservation.
+6. `POST /payments` with order_id, matching merchant_id and amount_paise creates PENDING. `POST /payments/{id}/simulate` with status=CONFIRMED and unique event_key records the explicit simulated outcome. The order becomes FULFILLMENT_PENDING.
+7. With the corresponding merchant identity, `POST /orders/{id}/fulfill` records demo fulfillment. Repeat for the three merchants.
+8. Transition the mission to VERIFYING. Invoke `/tools/verify_outcome` with mission_id, specialist_id=missioncart and inputs={}. It checks product quantities, fulfillment, matching confirmed demo payments and budget. Only then can the mission transition to COMPLETED.
 
-- Swap the simulated payment for a live Paytm merchant integration; the transaction schema already mirrors Paytm's public Payment Links / Order API field names.
-- Replace synthetic labels and redemption observations with Paytm production outcomes.
-- Persist accepted pricing/reward actions and measure uplift.
-- Add real lending policy constraints and underwriting review.
-- Upgrade Soundbox Copilot phrasing with a local LLM only when an offline Ollama server is available.
+Read `/orders/{id}`, `/payments/{id}`, `/payments/{id}/events` and `/missions/{id}/events` independently. Event polling accepts `after=<last event UUID>` and returns `next_cursor`; no fabricated AI logs are shown. Fulfillment is a merchant-recorded demo action, not externally verified delivery.

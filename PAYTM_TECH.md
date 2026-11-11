@@ -1,44 +1,15 @@
-# Paytm Technology in Paytm Grow
+# Payment boundaries and future Paytm integration
 
-Source of truth for the question "did you actually use Paytm technology?" — written to be pasted into a submission form as-is.
+Project Lucy is an independent hackathon prototype. Its Paytm-inspired navy/cyan interface is preserved; it is not an official Paytm product or an authorized payment service.
 
-## Summary
+The only installed adapter is `DemoPaymentProvider` in `backend/providers.py`. `POST /payments` creates an SQL-backed `DEMO_SIMULATED` session and records CREATED → INITIATED → PENDING events. It does not append a successful transaction or claim settlement. A separately authorized customer action invokes `/payments/{id}/simulate` to choose CONFIRMED, FAILED or CANCELLED. Every transition records simulation provenance and UTC time. `externally_verified` remains false, including after confirmation.
 
-We generate real UPI deep-link payment intents (`paytmmp://pay?...`) following the standard NPCI UPI URI scheme that the Paytm app itself resolves, so our payment flow produces a genuinely valid Paytm-compatible payment link for every transaction. Our backend's transaction schema is modeled on Paytm's public Payment Links API field structure so a live merchant integration is a credentials swap, not a rewrite. We did not have sandbox merchant credentials in the hackathon timeframe, so the in-app payment simulation (not the UPI link generation, which is real) drives the live demo for reliability.
+Orders have independent status, customer approval and inventory reservations. A matching approved CONFIRMED order is required for an order-linked payment. Demo confirmation consumes reservations and advances the order to FULFILLMENT_PENDING; the merchant can record FULFILLED. Failure/cancellation releases inventory. Already confirmed payments cannot be cancelled through the order endpoint; a future refund workflow is required. Refund/dispute state fields currently remain NONE and have no live processing endpoints.
 
-## What is actually built
+Idempotency keys are scoped to the actor and fingerprinted against action plus inputs. Repeated identical requests replay the original response. A different mutation with the same key conflicts. Payment event IDs are unique, and terminal sessions reject further confirmation. Actual status is read through `/payments/{id}`; an old idempotent response is not a substitute for a status read.
 
-**1. Real UPI deep-link intents, per transaction.**
-Every merchant in our dataset has a UPI virtual payment address (VPA) in the standard NPCI `identifier@psp` handle format, for example `sharmakirana@paytm`. When a payment is confirmed we construct two real deep links from that VPA:
+`backend/upi.py` and `src/lib/upi.ts` construct **syntax previews**. All seeded VPAs are synthetic; a well-formed VPA does not establish ownership, validity or merchant authorization. Preview strings appear as text, with no executable deep-link anchor or location assignment. The backend marks them `previewOnly=true`, `liveHandoffAllowed=false`, `recipientProvenance=SYNTHETIC`. No live configuration switch is exposed in Phase 0. Peer-to-peer UPI collect is not implemented. Future SplitSettle must use eligible payer-initiated flows.
 
-```
-paytmmp://pay?pa=sharmakirana@paytm&pn=Sharma%20Kirana%20Store&am=120.00&cu=INR&tn=Paytm%20Grow%20payment%20to%20Sharma%20Kirana%20Store&tr=PG-1-000123
-upi://pay?pa=sharmakirana@paytm&pn=Sharma%20Kirana%20Store&am=120.00&cu=INR&tn=Paytm%20Grow%20payment%20to%20Sharma%20Kirana%20Store&tr=PG-1-000123
-```
+An authorized Paytm adapter would require merchant onboarding and credentials, provider authentication and signing, server-side initiation, verified callbacks/webhooks with replay protection, independent status verification, reconciliation, failure/retry rules, refund/dispute permissions, operational monitoring and required commercial/regulatory approval. Browser handoff alone cannot prove settlement. Matching response field names is not a credentials-only migration. Live destinations must come from verified merchant configuration and must never reuse synthetic fixture VPAs.
 
-`paytmmp://` is the Paytm app's own registered URI scheme; `upi://` is the universal NPCI-defined scheme that any UPI app on the device resolves, Paytm included. The parameters are the standard NPCI ones: `pa` payee address, `pn` payee name, `am` amount, `cu` currency, `tn` transaction note, `tr` transaction reference (we pass our own `orderId` through it, which is what a live merchant reconciles against).
-
-The links are generated in both the backend (`backend/upi.py`, used by the payment API) and the frontend (`src/lib/upi.ts`, used for the pre-payment preview), with identical percent-encoding so the previewed string is the string the backend records.
-
-**2. A real handoff attempt, not a mock.**
-The Pay screen has a secondary "Pay with Paytm" button that assigns the generated URI to `window.location.href` — exactly how a web page invokes an installed UPI app. On a phone with Paytm installed this genuinely hands off to the real Paytm app. On a demo laptop no application is registered for the scheme, so it simply does not resolve; that is expected and does not affect the demo. A collapsible "View UPI payment link" shows the full generated URL string so the link can be inspected as a correctly-formed intent rather than taken on trust.
-
-**3. Transaction schema modeled on Paytm's public API field structure.**
-`POST /payments` accepts and returns Paytm-style field names so a live integration is a transport-and-credentials change rather than a schema migration:
-
-- Request: `merchantId`, `customerId`, `txnAmount: { value, currency }`, `paymentMode`, `txnNote`
-- Response: `orderId`, `txnId`, `txnAmount: { value, currency }`, `txnDate`, `txnStatus` (`TXN_SUCCESS`), `respCode`, `respMsg`, `paymentMode`, `payerVpa`, `payeeVpa`, `payeeName`, `txnNote`, `paytmIntent`, `upiIntent`
-
-This is documented in the code as a deliberate choice (see the docstring on `create_payment` in `backend/app.py` and the comment on `createPayment` in `src/lib/api.ts`). `GET /merchants/{id}/upi-intent` exposes the same link construction for inspection and logging.
-
-## What we are explicit about not having
-
-- **No sandbox merchant credentials.** We could not obtain Paytm merchant sandbox credentials within the hackathon timeframe, so no payment is initiated, authorised, or settled through Paytm. Nothing in the demo claims otherwise.
-- **The in-browser payment is simulated.** It writes a real row to our local SQLite database and triggers a real ML recompute, but it is not a live Paytm transaction. We kept it as the primary demo path for on-stage reliability. The UPI link generation sitting alongside it is real.
-- **No Paytm branding, trademarks, or scraped content.** The landing page and UI take visual cues (navy/cyan palette, structure) but all copy is our own.
-- **The comparison platforms in Market Match are fictional.** ZipKart, SpeedBasket, CityMart Express and QuickHive are invented demo brands with seeded prices, disclosed in a permanent visible caption in the app. The only real number in that comparison is the Paytm Grow Network Avg, computed from our own merchant data via peer similarity.
-
-## Verified
-
-- Every merchant VPA passes the NPCI handle format check (`backend/upi.py::is_valid_vpa`); `python backend/seed.py` prints sample links and reports any failures.
-- Amounts are always emitted with two decimals, spaces are percent-encoded as `%20`, and `@` is left raw in `pa` as real merchant links do.
+The UI demo allowance is not a financial ledger or Paytm wallet: opening illustrative ₹7,500 minus durable confirmed simulated payment amounts. Demo rewards combine the unchanged historical points baseline, deterministic simulated accrual and durable redemptions. They cannot be exchanged for real bill credits, cash or vouchers.

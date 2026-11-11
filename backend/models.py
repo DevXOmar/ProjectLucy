@@ -14,7 +14,7 @@ class Customer(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     phone: Mapped[str] = mapped_column(String, nullable=False)
     locality: Mapped[str] = mapped_column(String, nullable=False)
-    # Payer-side UPI handle, used as `payerVpa` in the payment API.
+    # Synthetic demo payer handle; not payment credentials.
     vpa: Mapped[str] = mapped_column(String, nullable=False, default="")
     home_merchant_id: Mapped[int] = mapped_column(ForeignKey("merchants.id"))
     churned: Mapped[bool] = mapped_column(default=False)
@@ -30,8 +30,7 @@ class Merchant(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     category: Mapped[str] = mapped_column(String, nullable=False)
     locality: Mapped[str] = mapped_column(String, nullable=False)
-    # Payee-side UPI handle. Real UPI deep links are generated from this, so the
-    # format follows the NPCI `identifier@psp` handle spec.
+    # Synthetic demo handle. Structural validity does not authorize payment.
     vpa: Mapped[str] = mapped_column(String, nullable=False, default="")
 
     home_customers = relationship("Customer", back_populates="home_merchant")

@@ -4,8 +4,6 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import {
   ArrowLeft,
   Banknote,
-  CheckCircle2,
-  ChevronDown,
   ChevronRight,
   Check,
   Gift,
@@ -16,7 +14,6 @@ import {
   QrCode,
   ReceiptText,
   Send,
-  Smartphone,
   Sparkles,
   Tag,
   WalletCards,
@@ -38,7 +35,8 @@ import {
   rupees,
   Transaction
 } from "./lib/api";
-import { paymentIntents } from "./lib/upi";
+import { AmountEntry, PaymentStatusScreen, ProcessingScreen } from "./components/PaymentFlow";
+import { LucyEntry, OperationalActivity } from "./components/LucyFoundation";
 import {
   AIBadge,
   AnimatedNumber,
@@ -77,6 +75,7 @@ type DataState = {
   rewardOffer?: RewardOffer;
   merchantRewards?: MerchantRewardSummary;
   loan?: LoanReadiness;
+  wallet?: import("./lib/api").DemoWallet;
   loading: boolean;
   error?: string;
 };
@@ -104,7 +103,7 @@ function App({ onExitToLanding }: { onExitToLanding?: () => void }) {
   const loadData = useCallback(async () => {
     setData((previous) => ({ ...previous, loading: true, error: undefined }));
     try {
-      const [customers, merchants, customer, merchant, customerTx, merchantTx, relationship, pulse, pricing, rewardOffer, merchantRewards, loan] = await Promise.all([
+      const [customers, merchants, customer, merchant, customerTx, merchantTx, relationship, pulse, pricing, rewardOffer, merchantRewards, loan, wallet] = await Promise.all([
         api.customers(),
         api.merchants(),
         api.customer(customerId),
@@ -116,9 +115,10 @@ function App({ onExitToLanding }: { onExitToLanding?: () => void }) {
         api.pricing(merchantId),
         api.rewardOffer(customerId),
         api.merchantRewards(merchantId),
-        api.loanReadiness(merchantId)
+        api.loanReadiness(merchantId),
+        api.wallet(customerId)
       ]);
-      setData({ customers, merchants, customer, merchant, customerTx, merchantTx, relationship, pulse, pricing, rewardOffer, merchantRewards, loan, loading: false });
+      setData({ customers, merchants, customer, merchant, customerTx, merchantTx, relationship, pulse, pricing, rewardOffer, merchantRewards, loan, wallet, loading: false });
     } catch (error) {
       setData((previous) => ({ ...previous, loading: false, error: error instanceof Error ? error.message : "Unable to load data" }));
     }
@@ -135,7 +135,7 @@ function App({ onExitToLanding }: { onExitToLanding?: () => void }) {
   }, [role]);
 
   const resetDemo = async () => {
-    await api.resetDemo();
+    try { await api.resetDemo(); } catch (err) { showToast(err instanceof Error ? err.message : "Reset failed"); return; }
     setPaymentResult(undefined);
     setSelectedTx(undefined);
     setCustomerScreen("home");
@@ -249,17 +249,18 @@ function CustomerView(props: {
   if (props.nav === "pay") {
     if (props.screen === "amount") return <AmountEntry customer={props.data.customer} merchant={props.selectedMerchant} setScreen={props.setScreen} setPaymentResult={props.setPaymentResult} reload={props.reload} />;
     if (props.screen === "processing") return <ProcessingScreen />;
-    if (props.screen === "success") return <PaymentSuccess result={props.paymentResult} rewardOffer={props.data.rewardOffer} goHome={() => props.setNav("home")} />;
+    if (props.screen === "success") return <PaymentStatusScreen result={props.paymentResult} setResult={props.setPaymentResult} reload={props.reload} goHome={() => props.setNav("home")} />;
     return <ScanQrScreen data={props.data} selectMerchant={(merchant) => { props.setSelectedMerchant(merchant); props.setScreen("amount"); }} />;
   }
   if (props.screen === "bills") return <StaticCustomerScreen title="Bills" icon={<ReceiptText />} back={() => props.setScreen("home")} text="Bill payments are coming soon in the full product." />;
   if (props.screen === "recharge") return <StaticCustomerScreen title="Recharge" icon={<Zap />} back={() => props.setScreen("home")} text="Mobile recharge rewards will plug into the same wallet." />;
   if (props.screen === "tx") return <TransactionDetail tx={props.selectedTx} back={() => props.setScreen("home")} />;
-  return <CustomerHome data={props.data} setCustomerId={props.setCustomerId} setMerchantId={props.setMerchantId} setNav={props.setNav} setScreen={props.setScreen} setSelectedTx={props.setSelectedTx} resetDemo={props.resetDemo} />;
+  return <CustomerHome data={props.data} setCustomerId={props.setCustomerId} setMerchantId={props.setMerchantId} setNav={props.setNav} setScreen={props.setScreen} setSelectedTx={props.setSelectedTx} resetDemo={props.resetDemo} onPayment={(p) => { props.setPaymentResult(p); props.setNav("pay"); props.setScreen("success"); }} />;
 }
 
-function CustomerHome({ data, setCustomerId, setMerchantId, setNav, setScreen, setSelectedTx, resetDemo }: {
+function CustomerHome({ data, setCustomerId, setMerchantId, setNav, setScreen, setSelectedTx, resetDemo, onPayment }: {
   data: DataState;
+  onPayment: (p: PaymentResult) => void;
   setCustomerId: (id: number) => void;
   setMerchantId: (id: number) => void;
   setNav: (nav: NavKey) => void;
@@ -268,7 +269,7 @@ function CustomerHome({ data, setCustomerId, setMerchantId, setNav, setScreen, s
   resetDemo: () => Promise<void>;
 }) {
   const spend = data.customerTx.slice(0, 20).reduce((sum, tx) => sum + tx.amount, 0);
-  const wallet = Math.max(120, 7500 - spend);
+  const wallet = (data.wallet?.display_balance_paise ?? 0) / 100;
   const points = data.rewardOffer?.points_balance ?? 0;
   return (
     <div className="space-y-4">
@@ -282,7 +283,7 @@ function CustomerHome({ data, setCustomerId, setMerchantId, setNav, setScreen, s
       <Card className="wallet-card border-paytm-navy text-text-inverse" delay={0.02}>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold text-text-inverse/70">Wallet balance</p>
+            <p className="text-xs font-bold text-text-inverse/70">Demo allowance</p>
             <h1 className="mt-1 text-3xl font-black text-text-inverse"><AnimatedNumber value={wallet} prefix="₹" /></h1>
           </div>
           <WalletCards className="text-paytm-cyan" size={38} />
@@ -292,7 +293,7 @@ function CustomerHome({ data, setCustomerId, setMerchantId, setNav, setScreen, s
           onClick={() => setNav("rewards")}
           className="mt-4 flex w-full items-center justify-between rounded-full border border-text-inverse/25 bg-text-inverse/10 px-4 py-2 text-left text-xs font-black text-text-inverse"
         >
-          <span className="flex items-center gap-2"><Gift size={15} className="text-paytm-cyan" /> Rewards points</span>
+          <span className="flex items-center gap-2"><Gift size={15} className="text-paytm-cyan" /> Demo rewards points</span>
           <span><AnimatedNumber value={points} /> pts</span>
         </motion.button>
         <div className="mt-5 grid grid-cols-3 gap-2 text-center text-xs font-bold">
@@ -301,6 +302,7 @@ function CustomerHome({ data, setCustomerId, setMerchantId, setNav, setScreen, s
           <Pill onClick={() => setNav("rewards")} className="border border-text-inverse text-text-inverse">Offers</Pill>
         </div>
       </Card>
+      <p className="px-1 text-[11px] text-text-muted">{data.wallet?.source}</p>
       <MerchantSelect
         merchants={data.merchants}
         value={data.merchant?.id}
@@ -311,14 +313,15 @@ function CustomerHome({ data, setCustomerId, setMerchantId, setNav, setScreen, s
         <div className="flex items-start gap-3">
           <div className="rounded-full bg-paytm-cyan px-3 py-1 text-xs font-black text-paytm-navy">AI</div>
           <div className="flex-1">
-            <h2 className="text-base font-black text-paytm-navy">Your Paytm Grow Insight</h2>
+            <h2 className="text-base font-black text-paytm-navy">Your Project Lucy Insight</h2>
             <p className="mt-1 text-sm leading-6 text-text-muted">
               You are a {data.relationship?.tier ?? "New"} at {data.merchant?.name ?? "this store"} with <AnimatedNumber value={Math.round((data.relationship?.p_alive ?? 0) * 100)} suffix="%" /> Loyalty Points health.
             </p>
+            <p className="mt-2 text-[11px] text-text-muted">Historical synthetic loyalty model · not recomputed by demo payments</p>
             <div className="mt-3">
               <ProgressBar value={data.relationship?.next_tier_threshold ? (data.relationship.visit_count / data.relationship.next_tier_threshold) * 100 : 100} label={data.relationship?.next_tier_threshold ? `${data.relationship.visits_to_next_tier} visits to next tier` : "VIP rewards unlocked"} />
             </div>
-            {data.relationship?.postpaid_eligible ? <p className="mt-3 rounded-2xl border border-success p-3 text-xs font-bold text-success">Interest-free Postpaid is available at this trusted store.</p> : null}
+            {data.relationship?.postpaid_eligible ? <p className="mt-3 rounded-2xl border border-success p-3 text-xs font-bold text-success">Historical demo eligibility signal only; no credit is offered.</p> : null}
           </div>
         </div>
       </Card>
@@ -328,6 +331,8 @@ function CustomerHome({ data, setCustomerId, setMerchantId, setNav, setScreen, s
         <QuickAction icon={<ReceiptText />} label="Bills" onClick={() => setScreen("bills")} />
         <QuickAction icon={<Gift />} label="Rewards" onClick={() => setNav("rewards")} />
       </div>
+      <LucyEntry key={data.customer?.id} customerId={data.customer?.id ?? 6} />
+      <OperationalActivity role="customer" id={data.customer?.id ?? 6} onPayment={onPayment} />
       <div className="grid grid-cols-2 gap-3">
         <StatBadge label="Home store" value={data.customer?.home_merchant_name ?? "Loading"} />
         <StatBadge label="Recent spend" value={<AnimatedNumber value={spend} prefix="₹" />} tone="green" />
@@ -354,7 +359,7 @@ function ScanQrScreen({ data, selectMerchant }: { data: DataState; selectMerchan
           <QrCode size={118} className="text-paytm-navy" />
         </div>
         <h2 className="mt-5 text-xl font-black text-text-primary">Scan QR</h2>
-        <p className="mt-2 text-sm text-text-muted">Scanning for nearby Paytm QR codes...</p>
+        <p className="mt-2 text-sm text-text-muted">Select a simulated merchant QR recipient below.</p>
       </Card>
       <Card>
         <h3 className="text-base font-black text-text-primary">Nearby merchants</h3>
@@ -389,249 +394,6 @@ function nearbyMerchants(merchants: Merchant[]) {
   });
 }
 
-function AmountEntry({ customer, merchant, setScreen, setPaymentResult, reload }: {
-  customer?: Customer;
-  merchant?: Merchant;
-  setScreen: (screen: CustomerScreen) => void;
-  setPaymentResult: (result?: PaymentResult) => void;
-  reload: () => Promise<void>;
-}) {
-  const [amount, setAmount] = useState("");
-  const numeric = Number(amount || 0);
-  const txnNote = `Paytm Grow payment to ${merchant?.name ?? "merchant"}`;
-  const press = (key: string) => {
-    if (key === "del") setAmount((value) => value.slice(0, -1));
-    else if (key === "." && amount.includes(".")) return;
-    else setAmount((value) => `${value}${key}`);
-  };
-  const pay = async () => {
-    if (!customer || !merchant || numeric <= 0) return;
-    setScreen("processing");
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    const result = await api.createPayment(customer.id, merchant.id, numeric, txnNote);
-    setPaymentResult(result);
-    await reload();
-    setScreen("success");
-  };
-  return (
-    <div className="space-y-4">
-      <button onClick={() => setScreen("scan")} className="flex items-center gap-2 text-sm font-black text-paytm-navy"><ArrowLeft size={17} /> Back</button>
-      <Card className="text-center">
-        <div className="mx-auto w-fit"><Avatar name={merchant?.name ?? "Merchant"} /></div>
-        <h2 className="mt-3 text-xl font-black text-text-primary">{merchant?.name ?? "Merchant"}</h2>
-        <div className="mt-2 flex items-center justify-center gap-2">
-          <CategoryChip category={merchant?.category} />
-          {merchant?.vpa ? <span className="text-xs font-bold text-text-muted">{merchant.vpa}</span> : null}
-        </div>
-        <p className="mt-2 text-sm text-text-muted">Paying as {customer?.name ?? "demo customer"}</p>
-        <div className="mt-6 text-4xl font-black text-paytm-navy">{rupees(numeric)}</div>
-      </Card>
-      <div className="grid grid-cols-3 gap-3">
-        {["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "del"].map((key) => (
-          <button key={key} onClick={() => press(key)} className="h-14 rounded-2xl border border-border bg-surface text-xl font-black text-text-primary shadow-soft">{key === "del" ? "⌫" : key}</button>
-        ))}
-      </div>
-      <button disabled={numeric <= 0} onClick={pay} className="w-full rounded-full bg-paytm-navy py-4 text-sm font-black text-text-inverse disabled:border disabled:border-border disabled:bg-bg disabled:text-text-muted">
-        Pay {numeric > 0 ? rupees(numeric) : ""}
-      </button>
-      <UpiIntentPanel merchant={merchant} amount={numeric} note={txnNote} />
-    </div>
-  );
-}
-
-/**
- * Secondary, genuinely real payment affordance.
- *
- * The link below is a real UPI deep link in the NPCI URI format, built from this
- * merchant's actual VPA. On a phone with Paytm installed, tapping it hands off to
- * the real Paytm app. On a demo laptop no app is registered for the scheme, so it
- * simply will not resolve - which is why the simulated in-browser payment above
- * stays the primary demo path. The link string is shown in full so it can be
- * checked as a correctly-formed intent.
- */
-function UpiIntentPanel({ merchant, amount, note }: { merchant?: Merchant; amount: number; note: string }) {
-  const [open, setOpen] = useState(false);
-  if (!merchant?.vpa) return null;
-  const payable = amount > 0 ? amount : 0;
-  const { paytmIntent, upiIntent } = paymentIntents({
-    payeeVpa: merchant.vpa,
-    payeeName: merchant.name,
-    amount: payable,
-    note
-  });
-  return (
-    <Card className="border-paytm-cyan">
-      <div className="flex items-start gap-3">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-paytm-cyan text-paytm-navy">
-          <Smartphone size={20} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-black text-text-primary">Pay with Paytm</h3>
-          <p className="mt-1 text-xs leading-5 text-text-muted">
-            This is a real Paytm-compatible UPI payment link. It opens the Paytm app on a phone; on this laptop nothing is
-            registered to handle it.
-          </p>
-        </div>
-      </div>
-      <motion.a
-        {...tapProps}
-        href={paytmIntent}
-        onClick={() => {
-          // A real handoff attempt, not a mock: assigning the URI is exactly how a
-          // web page invokes an installed UPI app.
-          window.location.href = paytmIntent;
-        }}
-        className="mt-3 block rounded-full bg-paytm-cyan py-3 text-center text-sm font-black text-paytm-navy"
-      >
-        Pay {payable > 0 ? rupees(payable) : ""} with Paytm
-      </motion.a>
-      <button
-        onClick={() => setOpen((value) => !value)}
-        className="mt-3 flex w-full items-center justify-between gap-2 text-left text-xs font-black text-paytm-navy"
-      >
-        View UPI payment link
-        <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown size={16} />
-        </motion.span>
-      </button>
-      <AnimatePresence>
-        {open ? (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="mt-3 space-y-3">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-wide text-text-muted">Paytm app scheme</p>
-                <p className="mt-1 break-all rounded-2xl border border-border bg-bg p-3 font-mono text-[10px] leading-4 text-paytm-navy">{paytmIntent}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-wide text-text-muted">Universal NPCI UPI scheme</p>
-                <p className="mt-1 break-all rounded-2xl border border-border bg-bg p-3 font-mono text-[10px] leading-4 text-paytm-navy">{upiIntent}</p>
-              </div>
-              <p className="text-[11px] leading-5 text-text-muted">
-                Standard UPI parameters: <span className="font-bold">pa</span> payee VPA, <span className="font-bold">pn</span> payee
-                name, <span className="font-bold">am</span> amount, <span className="font-bold">cu</span> currency,{" "}
-                <span className="font-bold">tn</span> note. The backend adds <span className="font-bold">tr</span> (its orderId) when
-                the payment is created.
-              </p>
-            </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-    </Card>
-  );
-}
-
-function ProcessingScreen() {
-  return (
-    <Card className="min-h-72 text-center">
-      <div className="mx-auto mt-10 h-16 w-16 animate-pulse rounded-full bg-paytm-cyan" />
-      <h2 className="mt-6 text-xl font-black text-text-primary">Processing payment</h2>
-      <p className="mt-2 text-sm text-text-muted">Updating transaction history and Loyalty Points...</p>
-    </Card>
-  );
-}
-
-function PaymentSuccess({ result, rewardOffer, goHome }: { result?: PaymentResult; rewardOffer?: RewardOffer; goHome: () => void }) {
-  const relationship = result?.relationship;
-  const pointsEarned = rewardOffer?.points_earned ?? Math.max(1, Math.round((result?.transaction.amount ?? 0) / 10));
-  return (
-    <div className="space-y-4">
-      <Card className="border-success text-center">
-        <CheckCircle2 className="mx-auto text-success" size={58} />
-        <h2 className="mt-4 text-2xl font-black text-text-primary">Payment Success</h2>
-        <p className="mt-2 text-3xl font-black text-paytm-navy"><AnimatedNumber value={result?.transaction.amount ?? 0} prefix="₹" /></p>
-        <p className="mt-3 text-sm leading-6 text-text-muted">
-          This is your {ordinal(relationship?.visit_count ?? 1)} payment to {relationship?.merchant_name ?? "this merchant"} — you're now a {relationship?.tier ?? "New"}.
-        </p>
-        {relationship?.postpaid_eligible ? <p className="mt-4 rounded-2xl border border-success p-3 text-xs font-bold text-success">Postpaid nudge: interest-free Pay Later is available at this trusted store.</p> : null}
-      </Card>
-      <Card className="relative overflow-hidden border-paytm-cyan text-center">
-        <CelebrationBurst />
-        <motion.div className="mx-auto grid h-16 w-16 place-items-center rounded-full border-4 border-paytm-cyan text-paytm-navy" initial={{ scale: 0.82 }} animate={{ scale: [0.82, 1.08, 1] }} transition={{ duration: 0.75 }}>
-          <Gift size={28} />
-        </motion.div>
-        <p className="mt-3 text-xs font-black uppercase text-text-muted">Points earned</p>
-        <p className="mt-1 text-3xl font-black text-paytm-navy"><AnimatedNumber value={pointsEarned} suffix=" pts" duration={0.8} /></p>
-        <p className="mt-2 text-xs font-bold text-success">{rewardOffer?.selected_arm ?? `${rewardOffer?.multiplier ?? 1}x`} Rewards Boost applied</p>
-      </Card>
-      <PaymentReceiptPanel result={result} />
-      <motion.button {...tapProps} onClick={goHome} className="w-full rounded-full bg-paytm-navy py-4 text-sm font-black text-text-inverse">Back to Home</motion.button>
-    </div>
-  );
-}
-
-/**
- * The order the backend actually recorded, shown with Paytm-style field names and
- * the real UPI deep link generated for it (`tr` carries our orderId).
- */
-function PaymentReceiptPanel({ result }: { result?: PaymentResult }) {
-  const [open, setOpen] = useState(false);
-  const payment = result?.payment;
-  if (!payment) return null;
-  return (
-    <Card>
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-wide text-text-muted">Order</p>
-          <p className="truncate text-sm font-black text-text-primary">{payment.orderId}</p>
-        </div>
-        <MetaChip tone="live">{payment.txnStatus}</MetaChip>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-        <div className="rounded-2xl border border-border p-2">
-          <p className="font-bold uppercase text-text-muted">payerVpa</p>
-          <p className="truncate font-mono text-paytm-navy">{payment.payerVpa}</p>
-        </div>
-        <div className="rounded-2xl border border-border p-2">
-          <p className="font-bold uppercase text-text-muted">payeeVpa</p>
-          <p className="truncate font-mono text-paytm-navy">{payment.payeeVpa}</p>
-        </div>
-      </div>
-      <button onClick={() => setOpen((value) => !value)} className="mt-3 flex w-full items-center justify-between gap-2 text-left text-xs font-black text-paytm-navy">
-        View UPI payment link
-        <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown size={16} />
-        </motion.span>
-      </button>
-      <AnimatePresence>
-        {open ? (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-            <p className="mt-3 break-all rounded-2xl border border-border bg-bg p-3 font-mono text-[10px] leading-4 text-paytm-navy">{payment.paytmIntent}</p>
-            <p className="mt-2 break-all rounded-2xl border border-border bg-bg p-3 font-mono text-[10px] leading-4 text-paytm-navy">{payment.upiIntent}</p>
-            <p className="mt-2 text-[11px] leading-5 text-text-muted">
-              Generated by the backend for this order in the standard NPCI UPI URI format that the Paytm app resolves.
-            </p>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-    </Card>
-  );
-}
-
-function CelebrationBurst() {
-  const dots = Array.from({ length: 10 });
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      {dots.map((_, index) => {
-        const angle = (index / dots.length) * Math.PI * 2;
-        return (
-          <motion.span
-            key={index}
-            initial={{ opacity: 0, x: 0, y: 0, scale: 0.4 }}
-            animate={{ opacity: [0, 1, 0], x: Math.cos(angle) * 74, y: Math.sin(angle) * 44, scale: [0.4, 1, 0.2] }}
-            transition={{ duration: 0.82, delay: 0.08 }}
-            className="absolute left-1/2 top-14 h-2 w-2 rounded-full bg-paytm-cyan"
-          />
-        );
-      })}
-    </div>
-  );
-}
-
 function CustomerRewards({ customer, rewardOffer, reload, showToast }: { customer?: Customer; rewardOffer?: RewardOffer; reload: () => Promise<void>; showToast: (message: string) => void }) {
   const [balanceStart, setBalanceStart] = useState(0);
   const [balanceEnd, setBalanceEnd] = useState(rewardOffer?.points_balance ?? 0);
@@ -654,18 +416,20 @@ function CustomerRewards({ customer, rewardOffer, reload, showToast }: { custome
   const redeem = async (offer: { name: string; points: number }) => {
     if (!customer) return;
     const previousBalance = rewardOffer?.points_balance ?? balanceEnd;
-    const result = await api.redeemReward(customer.id, offer.name, offer.points);
+    let result;
+    try { result = await api.redeemReward(customer.id, offer.name, offer.points); }
+    catch (err) { showToast(err instanceof Error ? err.message : "Redemption failed"); return; }
     setBalanceStart(previousBalance);
     setBalanceEnd(result.reward.points_balance);
-    showToast(`Redeemed! ${offer.name} is ready for your next bill.`);
+    showToast(`Demo redemption recorded: ${offer.name}`);
     await reload();
   };
   return (
     <div className="space-y-4">
       <Card className="wallet-card border-paytm-navy text-text-inverse">
-        <p className="text-xs font-bold text-text-inverse/70">Rewards wallet</p>
+        <p className="text-xs font-bold text-text-inverse/70">Demo rewards wallet</p>
         <h2 className="mt-1 text-3xl font-black text-text-inverse"><AnimatedNumber start={balanceStart} value={balanceEnd} suffix=" points" /></h2>
-        <p className="mt-2 text-sm text-text-inverse/70">Redeemable in your wallet for recharges, bills, travel.</p>
+        <p className="mt-2 text-sm text-text-inverse/70">Historical demo points plus simulated payment points. Redemptions are illustrative.</p>
       </Card>
       <div className="live-glow rounded-2xl">
         <InsightCard icon={<Sparkles size={20} />} headline={`${rewardOffer?.selected_arm ?? "1x"} active multiplier`} subtext={rewardOffer?.explanation ?? "Rewards Boost is loading."} />
@@ -767,18 +531,19 @@ function MerchantHome({ data, setMerchantId, setScreen }: { data: DataState; set
   const todayRevenue = data.merchantTx
     .filter((tx) => new Date(tx.timestamp).toDateString() === new Date().toDateString())
     .reduce((sum, tx) => sum + tx.amount, 0);
-  const fallbackRevenue = data.merchantTx.slice(0, 12).reduce((sum, tx) => sum + tx.amount, 0);
   const activeRegulars = data.pulse?.top_regulars.length ?? 0;
   const pointsIssued = data.merchantRewards?.points_issued_this_month ?? 0;
   return (
     <div className="space-y-4">
       <MerchantSelect merchants={data.merchants} value={data.merchant?.id} onChange={setMerchantId} label="Demo merchant" />
       <div className="grid grid-cols-2 gap-2">
-        <SummaryTile label="Today's revenue" value={<AnimatedNumber value={todayRevenue || fallbackRevenue} prefix="₹" />} trend="up" delay={0.02} />
+        <SummaryTile label="Today's demo receipts" value={<AnimatedNumber value={todayRevenue} prefix="₹" />} trend="up" delay={0.02} />
         <SummaryTile label="Active regulars" value={<AnimatedNumber value={activeRegulars} />} trend="up" delay={0.08} />
         <SummaryTile label="Churn risk" value={<AnimatedNumber value={data.pulse?.churn_alerts.length ?? 0} />} trend={data.pulse?.churn_alerts.length ? "down" : "up"} delay={0.14} />
         <SummaryTile label="Points issued" value={<AnimatedNumber value={pointsIssued} />} trend="up" delay={0.2} />
       </div>
+      <OperationalActivity role="merchant" id={data.merchant?.id ?? 1} />
+      <p className="text-[11px] text-text-muted">Regulars, rewards and ML insights below use the historical synthetic snapshot.</p>
       <AICard hero title="Merchant Pulse briefing" icon={<LineChart />} onClick={() => setScreen("insights")} text={data.pulse?.briefing ?? "Pulse loading"} footer={<ForecastChart forecast={data.pulse?.forecast_30d ?? []} compact />} />
       <div className="grid grid-cols-2 gap-3">
         <AICard title="Loyalty call-list" icon={<PhoneCall />} onClick={() => setScreen("call-list")} text={`${data.pulse?.churn_alerts.length ?? 0} regulars need attention: ${(data.pulse?.churn_alerts ?? []).slice(0, 1).map((r) => r.customer_name).join(", ") || "none right now"}`} />
@@ -947,21 +712,21 @@ function PricingTab({ merchant, pricing, showToast }: { merchant?: Merchant; pri
   });
   useEffect(() => {
     if (!merchant) return;
-    try {
-      setAccepted(JSON.parse(localStorage.getItem(`pricing-actions-${merchant.id}`) ?? "{}") as Record<string, boolean>);
-    } catch {
-      setAccepted({});
-    }
-  }, [merchant?.id]);
+    let cancelled = false;
+    api.pricingActions(merchant.id).then(actions => {
+      if (!cancelled) setAccepted(Object.fromEntries(actions.map(action => [action.sku, true])));
+    }).catch(err => { if (!cancelled) showToast(err instanceof Error ? err.message : "Unable to load pricing actions"); });
+    return () => { cancelled = true; };
+  }, [merchant?.id, showToast]);
   const ready = useDelayedReveal(!!pricing.length, `${merchant?.id}-pricing-${selectedSku}`, selectedSku === "all" ? 360 : 760);
   const selected = pricing.find((item) => item.sku === selectedSku);
   const acceptAction = async (item: PricingInsight) => {
     if (!merchant) return;
-    await api.acceptPricing(merchant.id, item.sku);
+    try { await api.acceptPricing(merchant.id, item.sku); }
+    catch (err) { showToast(err instanceof Error ? err.message : "Unable to record pricing action"); return; }
     const next = { ...accepted, [item.sku]: true };
     setAccepted(next);
-    localStorage.setItem(`pricing-actions-${merchant.id}`, JSON.stringify(next));
-    showToast(`Action taken for ${item.sku}.`);
+    showToast(`Demo recommendation recorded for ${item.sku}.`);
   };
   return (
     <div className="space-y-4">
@@ -982,7 +747,7 @@ function PricingTab({ merchant, pricing, showToast }: { merchant?: Merchant; pri
         <AnimatePresence>
           {showInfo ? (
             <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-3 rounded-2xl border border-paytm-cyan bg-bg p-3 text-xs font-bold leading-5 text-paytm-navy">
-              Benchmarked against behaviorally similar shops in Paytm Grow's own merchant network - not live web prices.
+              Benchmarked against behaviorally similar shops in Project Lucy's own merchant network - not live web prices.
             </motion.p>
           ) : null}
         </AnimatePresence>
@@ -1034,7 +799,7 @@ function PricingSkeleton({ focused }: { focused: boolean }) {
           <Tag size={18} />
         </motion.div>
         <div className="flex-1">
-          <p className="text-sm font-black text-paytm-navy">{focused ? "Checking nearby shops on Paytm Grow's network..." : "Loading price benchmarks..."}</p>
+          <p className="text-sm font-black text-paytm-navy">{focused ? "Checking nearby shops on Project Lucy's network..." : "Loading price benchmarks..."}</p>
           <div className="mt-2 flex gap-1">
             {[0, 1, 2].map((dot) => <motion.span key={dot} animate={{ opacity: [0.25, 1, 0.25] }} transition={{ duration: 0.8, repeat: Infinity, delay: dot * 0.15 }} className="h-2 w-2 rounded-full bg-paytm-cyan" />)}
           </div>
@@ -1072,7 +837,7 @@ function buildComparisonRows(item: PricingInsight, merchant?: Merchant): Compari
     },
     {
       key: "network",
-      label: "Paytm Grow Network Avg",
+      label: "Project Lucy Network Avg",
       price: item.benchmark_price,
       real: true,
       kind: "network",
@@ -1147,7 +912,7 @@ function FocusedPriceView({ item, merchant, accepted, onAccept }: { item: Pricin
         {hasDemoPlatforms ? (
           <p className="mt-4 rounded-2xl border border-border bg-bg p-3 text-[11px] leading-5 text-text-muted">
             ZipKart, SpeedBasket, CityMart Express, and QuickHive are illustrative demo platforms for this prototype. The
-            Paytm Grow Network Avg is a real benchmark computed from Paytm Grow's own merchant data using peer similarity.
+            Project Lucy Network Avg is a real benchmark computed from Project Lucy's own merchant data using peer similarity.
           </p>
         ) : null}
       </Card>
@@ -1161,7 +926,7 @@ function FocusedPriceView({ item, merchant, accepted, onAccept }: { item: Pricin
         </p>
         {/* The decision is driven only by the real computed benchmark, never by the illustrative platform prices. */}
         <p className="mt-3 rounded-2xl border border-border bg-bg p-3 text-[11px] leading-5 text-text-muted">
-          Based on your {rupees(item.your_price)} against the {rupees(item.benchmark_price)} Paytm Grow Network Avg. The
+          Based on your {rupees(item.your_price)} against the {rupees(item.benchmark_price)} Project Lucy Network Avg. The
           illustrative demo platform prices above are not used in this recommendation.
         </p>
         <motion.button {...tapProps} disabled={accepted} onClick={onAccept} className="mt-4 rounded-full bg-paytm-navy px-4 py-2 text-xs font-black text-text-inverse disabled:border disabled:border-border disabled:bg-bg disabled:text-text-muted">
@@ -1270,7 +1035,7 @@ function SoundboxCopilot({ pulse, pricing, loan }: { pulse?: Pulse; pricing: Pri
           .some((word) => word.length >= 3 && new RegExp(`\\b${word}\\b`).test(lower))
       );
       if (found) {
-        message = `${found.sku}: ${found.recommendation} Your price is ${rupees(found.your_price)} vs the Paytm Grow Network Avg of ${rupees(found.benchmark_price)}.`;
+        message = `${found.sku}: ${found.recommendation} Your price is ${rupees(found.your_price)} vs the Project Lucy Network Avg of ${rupees(found.benchmark_price)}.`;
       } else if (pricing.length) {
         // No specific item named: summarise the real computed benchmarks instead.
         const above = pricing.filter((item) => item.flag === "red");
@@ -1279,8 +1044,8 @@ function SoundboxCopilot({ pulse, pricing, loan }: { pulse?: Pulse; pricing: Pri
           undefined
         );
         message = above.length
-          ? `${above.length} of ${pricing.length} items are above the Paytm Grow Network Avg. The widest gap is ${widest?.sku} at ${rupees(widest?.your_price ?? 0)} against ${rupees(widest?.benchmark_price ?? 0)}.`
-          : `All ${pricing.length} items are at or below the Paytm Grow Network Avg. You are competitive this week.`;
+          ? `${above.length} of ${pricing.length} items are above the Project Lucy Network Avg. The widest gap is ${widest?.sku} at ${rupees(widest?.your_price ?? 0)} against ${rupees(widest?.benchmark_price ?? 0)}.`
+          : `All ${pricing.length} items are at or below the Project Lucy Network Avg. You are competitive this week.`;
       } else {
         message = "Market Match is still loading.";
       }
@@ -1325,9 +1090,5 @@ function SoundboxCopilot({ pulse, pricing, loan }: { pulse?: Pulse; pricing: Pri
   );
 }
 
-function ordinal(value: number) {
-  const suffix = value % 10 === 1 && value % 100 !== 11 ? "st" : value % 10 === 2 && value % 100 !== 12 ? "nd" : value % 10 === 3 && value % 100 !== 13 ? "rd" : "th";
-  return `${value}${suffix}`;
-}
 
 export default App;

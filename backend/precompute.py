@@ -105,7 +105,7 @@ def export_snapshot() -> None:
                     "payeeVpa": merchant.vpa,
                     "payeeName": merchant.name,
                     "txnAmount": {"value": "120.00", "currency": "INR"},
-                    **payment_intents(merchant.vpa, merchant.name, 120, f"Paytm Grow payment to {merchant.name}", order_id=f"PG-{merchant.id}-EXAMPLE"),
+                    **payment_intents(merchant.vpa, merchant.name, 120, f"Lucy synthetic preview to {merchant.name}", order_id=f"LUCY-{merchant.id}-EXAMPLE"),
                 }
                 for merchant in merchants[:5]
             ],

@@ -13,7 +13,7 @@ class MerchantOut(BaseModel):
     name: str
     category: str
     locality: str
-    # Real UPI virtual payment address; the Pay flow builds live deep links from it.
+    # Synthetic demo VPA; preview only, never an authorized payment destination.
     vpa: str = ""
     prices: list[SkuPriceOut] = []
 

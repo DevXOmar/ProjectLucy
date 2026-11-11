@@ -1,147 +1,61 @@
-# Paytm Grow
+# Project Lucy
 
-Hackathon prototype foundation for a merchant-growth layer built on Paytm-style payment infrastructure. The product name is **Paytm Grow**.
+Independent prototype for Paytm Build for India AI Hackathon 2026, Track 3: Autonomous AI Teammates. **Lucy** is the customer-facing crew lead; **CrewOS** is its commerce execution foundation. The product direction is Adaptive Commerce Orchestration across procurement, group purchasing, surplus and rental alternatives, with payment and support continuity. This is not an official Paytm product.
 
-## Stack
+Phase 0 preserves the navy/cyan mobile customer and merchant UI, 24 merchants, 400 demo customers, 14,304 synthetic historical transactions and existing ML insights. It adds durable operational commerce, approval boundaries and honest simulated payments. Autonomous LLM planning is not implemented.
 
-- Frontend: Vite + React + TypeScript + Tailwind
-- Backend: FastAPI + precomputed JSON snapshot
-- Storage: in-memory working copy of `backend/data/precomputed.json`
-- Services: none; the production server only serves checked-in data
+## Run locally
 
-## Setup
-```bash
-npm install
-/opt/homebrew/bin/python3.13 -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements-dev.txt
-python backend/precompute.py
-```
+Requires Node 20.19+ (or compatible newer Node), Python 3.11–3.13.
 
-Python 3.11-3.13 works well. If your default `python3` is 3.14, use Python 3.13 for the virtualenv because current Pydantic wheels may not be ready for 3.14.
-
-Fresh clone to running demo is under 5 minutes on a normal laptop. ML dependencies are needed only for the local `precompute.py` script; the deployed API uses the small production requirements file.
-
-## Run
-
-Terminal 1:
-
-```bash
+```sh
+npm ci
+python3 -m venv .venv
+.venv/bin/pip install -r backend/requirements-test.txt
+cp .env.example .env
 npm run backend
 ```
 
-Alternative manual commands:
+In another terminal, `npm run dev`, then open http://127.0.0.1:5173. `#/app` opens the demo. Backend reads `.env`; Vite reads `VITE_` settings. Defaults work without an env file. No ML training or snapshot rebuild is required. `backend/requirements-dev.txt` adds the optional historical ML toolchain; it is unnecessary for serving the app.
 
-```bash
-source .venv/bin/activate
-uvicorn app.main:app --reload
-```
-
-From inside `backend/`, either `uvicorn app:app --reload` or `uvicorn app.main:app --reload` now works.
-
-Terminal 2:
-
-```bash
-npm run dev
-```
-
-Open `http://127.0.0.1:5173`.
-
-Everything runs locally/offline after dependencies are installed. Set `VITE_API_BASE_URL` to the backend URL in the frontend Vercel project; it defaults to `/api` for local Vite proxy use. Serverless writes are in-memory and ephemeral: a fresh instance may not retain a payment or redemption from an earlier instance. Vercel normally keeps a warm instance for back-to-back demo requests.
-
-## Routes
-
-Hash routing, no router dependency and no auth:
-
-- `#/` — the marketing landing page (top nav, hero, feature grid, stats strip, footer). Default route.
-- `#/app` — the demo app shell, opened by the landing page's **Launch Demo** button. Always opens in Customer view; the top-bar toggle switches to Merchant view, and the top-bar wordmark returns to the landing page.
-
-## Modules
-
-| Module | What it does |
-| --- | --- |
-| Loyalty Points | BG/NBD `P(alive)`, Gamma-Gamma CLV, visit-count loyalty tier, postpaid eligibility |
-| Merchant Pulse | Holt-Winters 30-day forecast with confidence band, busiest hours, anomaly text, cashflow note |
-| Market Match | SVD peer-similarity price benchmarking, shown alongside an illustrative demo comparison set |
-| Rewards Boost | Thompson Sampling point multipliers over seeded synthetic redemption history |
-| Loan Readiness Coach | Random Forest readiness tier with SHAP-derived coaching factors |
-| Soundbox Copilot | Voice/typed answers that only rephrase already-computed numbers |
-
-## Reset Demo Data
-
-```bash
+```sh
+npm run build
+npm run test:backend
+npm run qa
 npm run reset
 ```
 
-The precompute reset is deterministic. It recreates the same **24 merchants across 6 categories** (4 per category), 400 customers, six months of transaction history, SKU/service prices, line items, seasonality, festival spikes, churn labels, and the seeded illustrative demo-platform prices every time. Production reset restores the checked-in JSON snapshot in memory.
+Playwright starts local servers if absent and runs desktop/mobile Chromium. Install its browser with `npx playwright install chromium` if needed. Reset requires the running API and the local developer token; it deletes operational demo records only. It is disabled on hosted/production instances. Tests use a temporary SQL database and never reset the developer's SQLite database.
 
-| Category | Example merchant | Catalogue |
-| --- | --- | --- |
-| Kirana | Sharma Kirana Store | milk, salt, atta, maggi, oil, soap, tea |
-| Chemist | Sai Ram Medicals | paracetamol strip, band-aid box, hand sanitizer 100ml, thermometer, multivitamin strip, ORS sachet |
-| Salon | Style Street Salon | haircut, shave, head massage, basic facial (services: price only, no unit) |
-| Distributor | Charminar FMCG Supply | bulk cooking oil 15L, rice 25kg, wheat flour 25kg, sugar 25kg |
-| Sports Shop | Deccan Sports Corner | cricket bat, badminton racket, football, yoga mat, gym gloves |
-| Clothing Shop | Nizam Fashion House | cotton t-shirt, jeans, kurta, formal shirt, saree |
+## Architecture
 
-The merchant selector in both Customer and Merchant view groups shops by category, so switching merchants shows Market Match adapting to a completely different catalogue. The relationship engine is category-agnostic: transaction history and Loyalty Points behave identically for a salon and a kirana.
+- React/TypeScript, Tailwind and existing hash navigation; payment UI extracted from `src/App.tsx` into `src/components/PaymentFlow.tsx`.
+- FastAPI `backend/app.py` keeps the historical JSON snapshot read-only. Pulse, pricing, loyalty modelling, rewards recommendations and loan coaching remain precomputed historical insights.
+- SQLAlchemy `backend/domain_models.py`, `backend/services.py` and `backend/commerce.py` provide the mutable operational store, services and typed APIs. Money is integer paise, identifiers are UUIDs and timestamps are UTC.
+- `/docs` exposes OpenAPI. `/agents` declares all eight specialists with honest PLANNED/LIMITED status. `/tools` publishes tool input schemas. `POST /missions` is Lucy's structured goal entry point; it records goals rather than inventing an execution trace.
 
-After seeding, the script logs:
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md), [DEMO.md](DEMO.md), [PAYTM_TECH.md](PAYTM_TECH.md) and the original [audit evidence](docs/BASELINE.md).
 
-- total transactions
-- transaction date range
-- weekend vs weekday volume ratio
-- churn count
-- merchants per category
-- seeded illustrative demo-platform price rows
-- sample UPI deep links, with VPA format validation
+## Persistence and deployment
 
-## Market Match honesty
+Local single-instance development uses `backend/lucy.db` with SQLite WAL, foreign keys and explicit transaction boundaries. Version 1 initialization creates the schema deterministically and seeds missing identities/offers without replacing operational state. Schema version mismatches fail startup; later schema changes require an explicit migration, not `create_all` pretending to alter existing tables.
 
-The focused comparison view ranks five sources per item:
+Hosted environments require a durable PostgreSQL `DATABASE_URL`, e.g. `postgresql+psycopg://…?sslmode=require`; Vercel or `APP_ENV=production` refuses SQLite. The production requirements include SQLAlchemy and psycopg. Vercel's backend configuration includes operational modules; use the backend directory as its project root, with a managed PostgreSQL connection and pooling appropriate to the host. Hosted deployment itself is not exercised by local tests.
 
-- **Your shop** and **Paytm Grow Network Avg** are genuinely computed. The network average is the mean price across behaviourally similar merchants found with `TruncatedSVD` embeddings and cosine similarity over our own transaction data, and it is tagged `Computed` in the UI.
-- **ZipKart, SpeedBasket, CityMart Express, QuickHive** are fictional demo platforms invented for this prototype. Their prices are seeded offsets around each item's category-norm price. A permanent caption under the list says exactly this, and the pricing recommendation ignores them entirely — it reads only the real network benchmark.
+For a hosted demo, set `LUCY_DEMO_AUTH=true` only behind deployment access protection. This explicitly permits impersonation through `X-Demo-Role` / `X-Demo-Id` headers. Customer/merchant selectors are demo navigation, **not authentication**. Demo identity defaults off on hosted environments; real authenticated principals must replace the dependency before a public transactional deployment. Configure `LUCY_CORS_ORIGINS` for the actual frontend origin. Reset remains disabled even if requested through environment variables.
 
-## Paytm technology
+Phase 0 serializes operational database requests (`BEGIN IMMEDIATE` locally, transaction-scoped PostgreSQL advisory lock across instances). This deliberately favors correctness and repeatability at demo scale. There are no external calls while locks are held. Reservations expire lazily on inventory/reservation reads and reservation-dependent actions; no worker is required.
 
-The Pay flow generates real UPI deep-link intents (`paytmmp://pay?...` plus the universal `upi://pay?...` fallback) in the standard NPCI URI format, and the transaction API mirrors Paytm's public Payment Links / Order API field naming. See [PAYTM_TECH.md](PAYTM_TECH.md).
+To run the same suite against a disposable PostgreSQL database:
 
-## API
+```sh
+LUCY_TEST_DATABASE_URL='postgresql+psycopg://USER@localhost:5432/lucy_test' npm run test:backend
+```
 
-- `GET /customers`
-- `GET /merchants`
-- `GET /stats`
-- `GET /customers/{id}`
-- `GET /merchants/{id}`
-- `GET /merchants/{id}/transactions`
-- `GET /merchants/{id}/upi-intent?amount=&note=`
-- `GET /customers/{id}/transactions`
-- `POST /payments`
-- `POST /recompute`
-- `GET /relationship/{customer_id}/{merchant_id}`
-- `GET /merchant/{id}/pulse`
-- `GET /merchant/{id}/pricing`
-- `POST /merchant/{id}/pricing/actions`
-- `POST /reset-demo`
-- `GET /rewards/{customer_id}/multiplier`
-- `GET /merchant/{id}/rewards`
-- `GET /merchant/{id}/loan-readiness`
+That database must be dedicated to tests: each test resets its operational fixtures. Historical rebuild scripts are guarded and excluded from normal operation; never point them at the operational store. The checked-in multi-megabyte snapshot was not regenerated in Phase 0.
 
-## Precomputed Production Data
+## Current limits
 
-`backend/precompute.py` recreates the seeded dataset and computes the ML cache locally. It writes the complete checked-in snapshot to `backend/data/precomputed.json`. The deployed FastAPI app loads that JSON once at cold start and does not import any ML or database library. The snapshot includes:
+All payment sessions use `DEMO_SIMULATED`; no funds, credit, refund or dispute processing occurs. Synthetic VPAs are preview-only. The demo allowance is an illustrative opening ₹7,500 minus confirmed simulated payments, not stored money. Demo points start from historical points and add one point per whole ₹10 simulated payment, minus durable redemptions. Historical ML results are not recomputed when a simulated payment is confirmed.
 
-- Loyalty Points: BG/NBD `P(alive)`, Gamma-Gamma CLV, visit-count loyalty tier, postpaid eligibility.
-- Merchant Pulse: Holt-Winters weekly-seasonal 30-day forecast, confidence band, busiest hours, churn alerts, anomaly text, and cashflow note.
-- Market Match: behavior-based merchant peer embeddings with `TruncatedSVD`, same-category cosine neighbors, SKU benchmarks, and deterministic recommendations.
-- Rewards Boost: pure NumPy Thompson Sampling over point multipliers with seeded synthetic redemption observations by loyalty tier.
-- Loan Readiness: `RandomForestClassifier` over synthetic merchant features with synthetic demo labels, plus SHAP-derived coaching factors. The demo label cut-points and the count/revenue coaching targets are percentiles of the network's own score distribution, so all three tiers stay populated whatever the merchant mix is.
-
-Use `python backend/precompute.py` locally after changing seed logic, then commit the regenerated JSON.
-
-The visible reset button in the app top bar calls `POST /reset-demo`, which restores the immutable in-memory snapshot instantly. `POST /recompute` reports the snapshot metadata and never runs ML in production.
-
-## Vercel Backend
-
-Deploy the `backend/` directory as its own Vercel project, with the project root set to `backend`. Vercel's Python runtime detects `api/index.py` and its top-level FastAPI `app`; `backend/vercel.json` rewrites all paths to that function. Deploy the backend first, verify `GET /health`, then set `VITE_API_BASE_URL` in the separate frontend Vercel project to the backend's deployment URL and redeploy the frontend. The CORS policy allows localhost and Vercel deployment domains.
+Movie Night offers are deterministic merchant-consented fixtures for customers 6 and 7, with fixed quote expiry at the end of 2027. Rental inventory reserves the single fixture asset conservatively; date-specific calendars, returns, deposits and live merchant onboarding are later work. No specialist is advertised as a working autonomous agent.

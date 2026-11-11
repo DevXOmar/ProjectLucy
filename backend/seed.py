@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 import random
 from collections import Counter
 from datetime import datetime, timedelta
 
-from sqlalchemy import func
+from sqlalchemy import func, inspect
 
 try:
     from .database import Base, SessionLocal, engine
@@ -135,6 +136,10 @@ LAST_NAMES = ["Reddy", "Sharma", "Khan", "Patel", "Iyer", "Gupta", "Rao", "Naidu
 
 
 def reset_db() -> None:
+    from pathlib import Path
+    operational_path = Path(__file__).resolve().parent / 'lucy.db'
+    if os.getenv('LUCY_REBUILD_HISTORY') != 'true' or engine.dialect.name != 'sqlite' or Path(engine.url.database).resolve() == operational_path or inspect(engine).has_table('lucy_schema_version'):
+        raise RuntimeError('Historical rebuild requires LUCY_REBUILD_HISTORY=true and a separate SQLite DATABASE_URL; use operational reset for the demo')
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
@@ -291,7 +296,7 @@ def seed() -> None:
         weekday_avg = by_day["weekday"] / weekday_days
         ratio = weekend_avg / weekday_avg
         by_category = Counter(merchant.category for merchant in merchants)
-        print("Seed complete for Paytm Grow")
+        print("Historical seed complete for Project Lucy")
         print(f"Total transactions: {total}")
         print(f"Date range: {first_tx.date()} to {last_tx.date()}")
         print(f"Weekend vs weekday volume ratio: {ratio:.2f}x")
@@ -299,15 +304,15 @@ def seed() -> None:
         print(f"Merchants: {len(merchants)} across {len(by_category)} categories -> {dict(by_category)}")
         print(f"Illustrative demo platform prices seeded: {platform_rows} rows across {len(DEMO_PLATFORMS)} demo platforms")
 
-        # Sanity-print a few real UPI deep links so the format can be eyeballed.
-        print("Sample UPI deep links (real NPCI/Paytm URI scheme):")
+        # Preview synthetic UPI syntax; these are not authorized payment destinations.
+        print("Synthetic UPI syntax previews (no live handoff):")
         for merchant in (merchants[0], merchants[8], merchants[16]):
             intents = payment_intents(
                 merchant.vpa,
                 merchant.name,
                 120.0,
-                f"Paytm Grow payment to {merchant.name}",
-                order_id="PG-DEMO-0001",
+                f"Lucy synthetic preview to {merchant.name}",
+                order_id="LUCY-DEMO-0001",
             )
             print(f"  {merchant.name} [{merchant.category}] vpa_valid={is_valid_vpa(merchant.vpa)}")
             print(f"    {intents['paytm_intent']}")

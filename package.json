@@ -1,12 +1,13 @@
 {
-  "name": "paytm-grow",
+  "name": "project-lucy",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "backend": "./.venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
-    "reset": "./.venv/bin/python backend/reset_demo.py",
+    "reset": "./.venv/bin/python -m backend.reset_demo",
+    "test:backend": "./.venv/bin/python -m pytest backend/tests -q",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "qa": "playwright test tests/qa.spec.ts --workers=1 --timeout=240000"
