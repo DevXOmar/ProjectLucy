@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "app.py": {
+      "excludeFiles": "{__pycache__/**,tests/**,*.db,ml_engine.py,models.py,seed.py,database.py,schemas.py,reset_demo.py,precompute.py}"
+    }
+  }
+}

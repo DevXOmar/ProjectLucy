@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+backend/paytm_grow.db
+test-results/
+playwright-report/

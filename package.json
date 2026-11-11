@@ -1,0 +1,33 @@
+{
+  "name": "paytm-grow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "backend": "./.venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+    "reset": "./.venv/bin/python backend/reset_demo.py",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "qa": "playwright test tests/qa.spec.ts --workers=1 --timeout=240000"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "framer-motion": "^13.1.1",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.0",
+    "react-countup": "^6.5.3",
+    "react-dom": "^19.1.0",
+    "recharts": "^3.10.1",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17"
+  }
+}
